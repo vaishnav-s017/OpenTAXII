@@ -67,18 +67,15 @@ api_key_account = Account(
     is_admin=True,
 )
 
+bearer_token_account = Account(
+    id="bearer_token",
+    username="bearer_token_user",
+    permissions={},
+    is_admin=True,
+)
+
 
 def _authenticate(server, headers):
-    # Check for bearer token header (token without "Bearer " prefix)
-    bearer_token_header = server.config.get("bearer_token_header")
-    if bearer_token_header:
-        token = headers.get(bearer_token_header)
-        if token:
-            account = server.auth.get_account(token)
-            if account:
-                return account
-            log.warning("auth.bearer_token_header.invalid_token", header=bearer_token_header)
-
     # Check for API key authentication
     api_key_header = server.config.get("api_key_header")
     api_key = server.config.get("api_key")
@@ -120,6 +117,10 @@ def _authenticate(server, headers):
         token = server.auth.authenticate(username, password)
 
     elif auth_type == "bearer":
+        # Check for static bearer token first
+        static_bearer_token = server.config.get("bearer_token")
+        if static_bearer_token and raw_token == static_bearer_token:
+            return bearer_token_account
         token = raw_token
     else:
         server.raise_unauthorized()

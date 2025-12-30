@@ -48,9 +48,9 @@ class ServerConfig(dict):
         "auth_api",
         "taxii1",
         "taxii2",
-        "bearer_token_header",
         "api_key_header",
         "api_key",
+        "bearer_token",
     )
     VALID_TAXII_OPTIONS = ("persistence_api",)
     VALID_TAXII1_OPTIONS = (

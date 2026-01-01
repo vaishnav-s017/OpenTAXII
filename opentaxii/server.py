@@ -530,6 +530,10 @@ class TAXII2Server(BaseTAXIIServer):
 
     @register_handler(r"^/taxii2/$", handles_own_auth=True)
     def discovery_handler(self):
+        return self._discovery_impl()
+
+    def _discovery_impl(self):
+        """Implementation of discovery endpoint (auth-agnostic)."""
         if context.account is None and not self.config.get("public_discovery", False):
             raise Unauthorized()
         response = {
@@ -546,6 +550,10 @@ class TAXII2Server(BaseTAXIIServer):
 
     @register_handler(r"^/taxii2/(?P<api_root_id>[^/]+)/$", handles_own_auth=True)
     def api_root_handler(self, api_root_id: str):
+        return self._api_root_impl(api_root_id)
+
+    def _api_root_impl(self, api_root_id: str):
+        """Implementation of API root endpoint (auth-agnostic)."""
         try:
             api_root = self.persistence.get_api_root(api_root_id=uuid.UUID(api_root_id))
         except DoesNotExistError:
@@ -568,6 +576,10 @@ class TAXII2Server(BaseTAXIIServer):
         handles_own_auth=True,
     )
     def job_handler(self, api_root_id: str, job_id: str):
+        return self._job_impl(api_root_id, job_id)
+
+    def _job_impl(self, api_root_id: str, job_id: str):
+        """Implementation of job status endpoint (auth-agnostic)."""
         api_root_uuid = uuid.UUID(api_root_id)
         try:
             api_root = self.persistence.get_api_root(api_root_id=api_root_uuid)
@@ -590,6 +602,10 @@ class TAXII2Server(BaseTAXIIServer):
         r"^/taxii2/(?P<api_root_id>[^/]+)/collections/$", handles_own_auth=True
     )
     def collections_handler(self, api_root_id: str):
+        return self._collections_impl(api_root_id)
+
+    def _collections_impl(self, api_root_id: str):
+        """Implementation of collections list endpoint (auth-agnostic)."""
         api_root_uuid = uuid.UUID(api_root_id)
         try:
             api_root = self.persistence.get_api_root(api_root_id=api_root_uuid)
@@ -624,6 +640,10 @@ class TAXII2Server(BaseTAXIIServer):
         handles_own_auth=True,
     )
     def collection_handler(self, api_root_id: str, collection_id_or_alias: str):
+        return self._collection_impl(api_root_id, collection_id_or_alias)
+
+    def _collection_impl(self, api_root_id: str, collection_id_or_alias: str):
+        """Implementation of collection detail endpoint (auth-agnostic)."""
         try:
             collection = self.persistence.get_collection(
                 api_root_id=uuid.UUID(api_root_id),
@@ -657,6 +677,10 @@ class TAXII2Server(BaseTAXIIServer):
         handles_own_auth=True,
     )
     def manifest_handler(self, api_root_id: str, collection_id_or_alias: str):
+        return self._manifest_impl(api_root_id, collection_id_or_alias)
+
+    def _manifest_impl(self, api_root_id: str, collection_id_or_alias: str):
+        """Implementation of manifest endpoint (auth-agnostic)."""
         filter_params = validate_list_filter_params(request.args, self.persistence.api)
         try:
             manifest, more = self.persistence.get_manifest(
@@ -877,6 +901,12 @@ class TAXII2Server(BaseTAXIIServer):
     def versions_handler(
         self, api_root_id: str, collection_id_or_alias: str, object_id: str
     ):
+        return self._versions_impl(api_root_id, collection_id_or_alias, object_id)
+
+    def _versions_impl(
+        self, api_root_id: str, collection_id_or_alias: str, object_id: str
+    ):
+        """Implementation of versions endpoint (auth-agnostic)."""
         filter_params = validate_versions_filter_params(
             request.args, self.persistence.api
         )
@@ -911,6 +941,231 @@ class TAXII2Server(BaseTAXIIServer):
             response,
             extra_headers=headers,
         )
+
+    # Basic Auth Only Endpoints
+    @register_handler(r"^/basic-auth/taxii2/$")
+    def discovery_handler_basic(self):
+        return self._discovery_impl()
+
+    @register_handler(r"^/basic-auth/taxii2/(?P<api_root_id>[^/]+)/$")
+    def api_root_handler_basic(self, api_root_id: str):
+        return self._api_root_impl(api_root_id)
+
+    @register_handler(
+        r"^/basic-auth/taxii2/(?P<api_root_id>[^/]+)/status/(?P<job_id>[^/]+)/$"
+    )
+    def job_handler_basic(self, api_root_id: str, job_id: str):
+        return self._job_impl(api_root_id, job_id)
+
+    @register_handler(r"^/basic-auth/taxii2/(?P<api_root_id>[^/]+)/collections/$")
+    def collections_handler_basic(self, api_root_id: str):
+        return self._collections_impl(api_root_id)
+
+    @register_handler(
+        r"^/basic-auth/taxii2/(?P<api_root_id>[^/]+)"
+        r"/collections/(?P<collection_id_or_alias>[^/]+)/$"
+    )
+    def collection_handler_basic(self, api_root_id: str, collection_id_or_alias: str):
+        return self._collection_impl(api_root_id, collection_id_or_alias)
+
+    @register_handler(
+        r"^/basic-auth/taxii2/(?P<api_root_id>[^/]+)"
+        r"/collections/(?P<collection_id_or_alias>[^/]+)/manifest/$"
+    )
+    def manifest_handler_basic(self, api_root_id: str, collection_id_or_alias: str):
+        return self._manifest_impl(api_root_id, collection_id_or_alias)
+
+    @register_handler(
+        r"^/basic-auth/taxii2/(?P<api_root_id>[^/]+)"
+        r"/collections/(?P<collection_id_or_alias>[^/]+)/objects/$",
+        ("GET", "POST"),
+        valid_content_types=("application/taxii+json;version=2.1",),
+    )
+    def objects_handler_basic(self, api_root_id: str, collection_id_or_alias: str):
+        api_root_uuid = uuid.UUID(api_root_id)
+        if request.method == "GET":
+            return self.objects_get_handler(api_root_uuid, collection_id_or_alias)
+        if request.method == "POST":
+            return self.objects_post_handler(api_root_uuid, collection_id_or_alias)
+
+    @register_handler(
+        r"^/basic-auth/taxii2/(?P<api_root_id>[^/]+)"
+        r"/collections/(?P<collection_id_or_alias>[^/]+)"
+        r"/objects/(?P<object_id>[^/]+)/$",
+        ("GET", "DELETE"),
+    )
+    def object_handler_basic(
+        self, api_root_id: str, collection_id_or_alias: str, object_id: str
+    ):
+        api_root_uuid = uuid.UUID(api_root_id)
+        if request.method == "GET":
+            return self.object_get_handler(
+                api_root_uuid, collection_id_or_alias, object_id
+            )
+        if request.method == "DELETE":
+            return self.object_delete_handler(
+                api_root_uuid, collection_id_or_alias, object_id
+            )
+
+    @register_handler(
+        r"^/basic-auth/taxii2/(?P<api_root_id>[^/]+)"
+        r"/collections/(?P<collection_id_or_alias>[^/]+)"
+        r"/objects/(?P<object_id>[^/]+)/versions/$"
+    )
+    def versions_handler_basic(
+        self, api_root_id: str, collection_id_or_alias: str, object_id: str
+    ):
+        return self._versions_impl(api_root_id, collection_id_or_alias, object_id)
+
+    # Bearer Auth Only Endpoints
+    @register_handler(r"^/bearer-auth/taxii2/$")
+    def discovery_handler_bearer(self):
+        return self._discovery_impl()
+
+    @register_handler(r"^/bearer-auth/taxii2/(?P<api_root_id>[^/]+)/$")
+    def api_root_handler_bearer(self, api_root_id: str):
+        return self._api_root_impl(api_root_id)
+
+    @register_handler(
+        r"^/bearer-auth/taxii2/(?P<api_root_id>[^/]+)/status/(?P<job_id>[^/]+)/$"
+    )
+    def job_handler_bearer(self, api_root_id: str, job_id: str):
+        return self._job_impl(api_root_id, job_id)
+
+    @register_handler(r"^/bearer-auth/taxii2/(?P<api_root_id>[^/]+)/collections/$")
+    def collections_handler_bearer(self, api_root_id: str):
+        return self._collections_impl(api_root_id)
+
+    @register_handler(
+        r"^/bearer-auth/taxii2/(?P<api_root_id>[^/]+)"
+        r"/collections/(?P<collection_id_or_alias>[^/]+)/$"
+    )
+    def collection_handler_bearer(self, api_root_id: str, collection_id_or_alias: str):
+        return self._collection_impl(api_root_id, collection_id_or_alias)
+
+    @register_handler(
+        r"^/bearer-auth/taxii2/(?P<api_root_id>[^/]+)"
+        r"/collections/(?P<collection_id_or_alias>[^/]+)/manifest/$"
+    )
+    def manifest_handler_bearer(self, api_root_id: str, collection_id_or_alias: str):
+        return self._manifest_impl(api_root_id, collection_id_or_alias)
+
+    @register_handler(
+        r"^/bearer-auth/taxii2/(?P<api_root_id>[^/]+)"
+        r"/collections/(?P<collection_id_or_alias>[^/]+)/objects/$",
+        ("GET", "POST"),
+        valid_content_types=("application/taxii+json;version=2.1",),
+    )
+    def objects_handler_bearer(self, api_root_id: str, collection_id_or_alias: str):
+        api_root_uuid = uuid.UUID(api_root_id)
+        if request.method == "GET":
+            return self.objects_get_handler(api_root_uuid, collection_id_or_alias)
+        if request.method == "POST":
+            return self.objects_post_handler(api_root_uuid, collection_id_or_alias)
+
+    @register_handler(
+        r"^/bearer-auth/taxii2/(?P<api_root_id>[^/]+)"
+        r"/collections/(?P<collection_id_or_alias>[^/]+)"
+        r"/objects/(?P<object_id>[^/]+)/$",
+        ("GET", "DELETE"),
+    )
+    def object_handler_bearer(
+        self, api_root_id: str, collection_id_or_alias: str, object_id: str
+    ):
+        api_root_uuid = uuid.UUID(api_root_id)
+        if request.method == "GET":
+            return self.object_get_handler(
+                api_root_uuid, collection_id_or_alias, object_id
+            )
+        if request.method == "DELETE":
+            return self.object_delete_handler(
+                api_root_uuid, collection_id_or_alias, object_id
+            )
+
+    @register_handler(
+        r"^/bearer-auth/taxii2/(?P<api_root_id>[^/]+)"
+        r"/collections/(?P<collection_id_or_alias>[^/]+)"
+        r"/objects/(?P<object_id>[^/]+)/versions/$"
+    )
+    def versions_handler_bearer(
+        self, api_root_id: str, collection_id_or_alias: str, object_id: str
+    ):
+        return self._versions_impl(api_root_id, collection_id_or_alias, object_id)
+
+    # API Key Auth Only Endpoints
+    @register_handler(r"^/apikey-auth/taxii2/$")
+    def discovery_handler_apikey(self):
+        return self._discovery_impl()
+
+    @register_handler(r"^/apikey-auth/taxii2/(?P<api_root_id>[^/]+)/$")
+    def api_root_handler_apikey(self, api_root_id: str):
+        return self._api_root_impl(api_root_id)
+
+    @register_handler(
+        r"^/apikey-auth/taxii2/(?P<api_root_id>[^/]+)/status/(?P<job_id>[^/]+)/$"
+    )
+    def job_handler_apikey(self, api_root_id: str, job_id: str):
+        return self._job_impl(api_root_id, job_id)
+
+    @register_handler(r"^/apikey-auth/taxii2/(?P<api_root_id>[^/]+)/collections/$")
+    def collections_handler_apikey(self, api_root_id: str):
+        return self._collections_impl(api_root_id)
+
+    @register_handler(
+        r"^/apikey-auth/taxii2/(?P<api_root_id>[^/]+)"
+        r"/collections/(?P<collection_id_or_alias>[^/]+)/$"
+    )
+    def collection_handler_apikey(self, api_root_id: str, collection_id_or_alias: str):
+        return self._collection_impl(api_root_id, collection_id_or_alias)
+
+    @register_handler(
+        r"^/apikey-auth/taxii2/(?P<api_root_id>[^/]+)"
+        r"/collections/(?P<collection_id_or_alias>[^/]+)/manifest/$"
+    )
+    def manifest_handler_apikey(self, api_root_id: str, collection_id_or_alias: str):
+        return self._manifest_impl(api_root_id, collection_id_or_alias)
+
+    @register_handler(
+        r"^/apikey-auth/taxii2/(?P<api_root_id>[^/]+)"
+        r"/collections/(?P<collection_id_or_alias>[^/]+)/objects/$",
+        ("GET", "POST"),
+        valid_content_types=("application/taxii+json;version=2.1",),
+    )
+    def objects_handler_apikey(self, api_root_id: str, collection_id_or_alias: str):
+        api_root_uuid = uuid.UUID(api_root_id)
+        if request.method == "GET":
+            return self.objects_get_handler(api_root_uuid, collection_id_or_alias)
+        if request.method == "POST":
+            return self.objects_post_handler(api_root_uuid, collection_id_or_alias)
+
+    @register_handler(
+        r"^/apikey-auth/taxii2/(?P<api_root_id>[^/]+)"
+        r"/collections/(?P<collection_id_or_alias>[^/]+)"
+        r"/objects/(?P<object_id>[^/]+)/$",
+        ("GET", "DELETE"),
+    )
+    def object_handler_apikey(
+        self, api_root_id: str, collection_id_or_alias: str, object_id: str
+    ):
+        api_root_uuid = uuid.UUID(api_root_id)
+        if request.method == "GET":
+            return self.object_get_handler(
+                api_root_uuid, collection_id_or_alias, object_id
+            )
+        if request.method == "DELETE":
+            return self.object_delete_handler(
+                api_root_uuid, collection_id_or_alias, object_id
+            )
+
+    @register_handler(
+        r"^/apikey-auth/taxii2/(?P<api_root_id>[^/]+)"
+        r"/collections/(?P<collection_id_or_alias>[^/]+)"
+        r"/objects/(?P<object_id>[^/]+)/versions/$"
+    )
+    def versions_handler_apikey(
+        self, api_root_id: str, collection_id_or_alias: str, object_id: str
+    ):
+        return self._versions_impl(api_root_id, collection_id_or_alias, object_id)
 
 
 class ServerMapping(NamedTuple):

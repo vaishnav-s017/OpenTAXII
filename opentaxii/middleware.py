@@ -76,20 +76,35 @@ bearer_token_account = Account(
 
 
 def _authenticate(server, headers):
+    path = request.path
+
+    # Determine which auth methods to try based on path
+    if path.startswith('/basic-auth/'):
+        allowed_methods = ['basic']
+    elif path.startswith('/bearer-auth/'):
+        allowed_methods = ['bearer']
+    elif path.startswith('/apikey-auth/'):
+        allowed_methods = ['apikey']
+    else:
+        allowed_methods = ['apikey', 'basic', 'bearer']  # Original behavior
+
     # Check for API key authentication
     api_key_header = server.config.get("api_key_header")
     api_key = server.config.get("api_key")
-    if api_key_header and api_key:
+    if 'apikey' in allowed_methods and api_key_header and api_key:
         provided_key = headers.get(api_key_header)
         if provided_key:
             if provided_key == api_key:
                 return api_key_account
-            log.warning("auth.api_key.invalid", header=api_key_header)
+            log.warning("auth.api_key.invalid", header=api_key_header, path=path)
             server.raise_unauthorized()
 
     # Fall back to standard Authorization header (Basic/Bearer)
     auth_header = headers.get(HTTP_AUTHORIZATION)
     if not auth_header:
+        # If auth was required for this path, raise unauthorized
+        if path.startswith(('/basic-auth/', '/bearer-auth/', '/apikey-auth/')):
+            server.raise_unauthorized()
         return None
 
     parts = auth_header.split(" ", 1)
@@ -102,6 +117,9 @@ def _authenticate(server, headers):
     auth_type = auth_type.lower()
 
     if auth_type == "basic":
+        if 'basic' not in allowed_methods:
+            log.warning("auth.wrong_type", required_methods=allowed_methods, actual=auth_type, path=path)
+            server.raise_unauthorized()
 
         if not server.is_basic_auth_supported():
             server.raise_unauthorized()
@@ -117,6 +135,10 @@ def _authenticate(server, headers):
         token = server.auth.authenticate(username, password)
 
     elif auth_type == "bearer":
+        if 'bearer' not in allowed_methods:
+            log.warning("auth.wrong_type", required_methods=allowed_methods, actual=auth_type, path=path)
+            server.raise_unauthorized()
+
         # Check for static bearer token first
         static_bearer_token = server.config.get("bearer_token")
         if static_bearer_token and raw_token == static_bearer_token:
